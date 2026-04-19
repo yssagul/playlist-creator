@@ -1,0 +1,16 @@
+# Secrets and auth tokens — never commit these
+.env
+.tidal_session.json
+
+# Runtime state — local to each machine/account
+.playlist_state.json
+transfer_failures.log
+.cache
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Claude Code session data
+.claude/
