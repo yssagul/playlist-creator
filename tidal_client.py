@@ -41,14 +41,23 @@ def _request(
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
 
-    try:
-        with urllib.request.urlopen(req, context=_SSL) as resp:
-            raw = resp.read()
-            return json.loads(raw) if raw else {}
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode()
-        print(f"  [Tidal] HTTP {e.code} on {method} {path}: {error_body[:300]}")
-        return None
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req, context=_SSL) as resp:
+                raw = resp.read()
+                return json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode()
+            print(f"  [Tidal] HTTP {e.code} on {method} {path}: {error_body[:300]}")
+            return None
+        except OSError as e:
+            if attempt < 2:
+                delay = 2 ** attempt
+                print(f"  [Tidal] Connection error ({e}), retrying in {delay}s...")
+                time.sleep(delay)
+            else:
+                print(f"  [Tidal] Connection error after 3 attempts: {e}")
+                return None
 
 
 def _get(auth, path, params=None):

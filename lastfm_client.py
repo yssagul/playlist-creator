@@ -20,18 +20,21 @@ class LastFMClient:
         self.user = self.network.get_user(LASTFM_USERNAME)
 
     def get_scrobbles_for_week(
-        self, week_start: datetime, week_end: datetime
+        self, week_start: datetime, week_end: datetime, chronological: bool = False
     ) -> list[dict]:
         """
         Return tracks scrobbled in [week_start, week_end], deduplicated by
-        (artist, title). Each entry: {artist, title, play_count}, sorted by
-        play_count descending.
+        (artist, title). Each entry: {artist, title, play_count}.
+
+        chronological=False (default): sorted by play_count descending.
+        chronological=True: sorted by first play, oldest first.
         """
         start_ts = int(week_start.timestamp())
         end_ts = int(week_end.timestamp())
 
         play_counts: dict[tuple[str, str], int] = {}
         canonical: dict[tuple[str, str], dict] = {}
+        order: list[tuple[str, str]] = []  # insertion order for chronological mode
 
         try:
             items = self.user.get_recent_tracks(
@@ -40,18 +43,23 @@ class LastFMClient:
                 time_to=end_ts,
                 stream=True,
             )
-            for item in items:
-                if not item.timestamp:  # skip now-playing entries
-                    continue
+            raw = [item for item in items if item.timestamp]
+            # API returns newest-first; reverse for oldest-first chronological order
+            if chronological:
+                raw = list(reversed(raw))
+            for item in raw:
                 artist = item.track.artist.name
                 title = item.track.title
                 key = (artist.lower(), title.lower())
                 play_counts[key] = play_counts.get(key, 0) + 1
                 if key not in canonical:
                     canonical[key] = {"artist": artist, "title": title}
+                    order.append(key)
         except pylast.WSError as e:
             print(f"  [Last.fm] API error: {e}")
 
+        if chronological:
+            return [{**canonical[k], "play_count": play_counts[k]} for k in order]
         return [
             {**canonical[k], "play_count": play_counts[k]}
             for k in sorted(play_counts, key=lambda k: -play_counts[k])

@@ -50,6 +50,10 @@ def parse_args() -> argparse.Namespace:
         "--dry-run", action="store_true",
         help="Fetch and resolve tracks but do not create or modify playlists.",
     )
+    parser.add_argument(
+        "--bypass-bpm", action="store_true",
+        help="Skip GetSongBPM lookups; tracks are added in play-count order.",
+    )
     return parser.parse_args()
 
 
@@ -87,6 +91,7 @@ def process_week(
     bpm_client: GetSongBPM | None,
     state: StateManager,
     dry_run: bool,
+    bypass_bpm: bool = False,
 ) -> tuple[int, int]:
     """Returns (tracks_added, tracks_failed)."""
     year, week = parse_week_key(week_key)
@@ -97,7 +102,7 @@ def process_week(
     print(f"\n{prefix}{playlist_name}  ({start.strftime('%b %d')} – {end.strftime('%b %d, %Y')})")
 
     # 1. Fetch scrobbles (ordered by play count desc)
-    scrobbles = lastfm.get_scrobbles_for_week(start, end)
+    scrobbles = lastfm.get_scrobbles_for_week(start, end, chronological=bypass_bpm)
     if not scrobbles:
         print("  No scrobbles — skipping.")
         return 0, 0
@@ -123,7 +128,7 @@ def process_week(
             print(" ✗ not found on Tidal")
             continue
 
-        features = bpm_client.get(artist, title) if bpm_client else AudioFeatures.unknown()
+        features = bpm_client.get(artist, title) if (bpm_client and not bypass_bpm) else AudioFeatures.unknown()
         if features is None:
             features = AudioFeatures.unknown()
 
@@ -218,10 +223,12 @@ def main():
         print("Mode: DRY RUN")
     if args.force_update:
         print("Mode: FORCE UPDATE")
+    if args.bypass_bpm:
+        print("Mode: BPM BYPASS (tracks ordered by play count)")
 
     total_added = total_failed = 0
     for week_key in weeks:
-        added, failed = process_week(week_key, lastfm, tidal, bpm_client, state, args.dry_run)
+        added, failed = process_week(week_key, lastfm, tidal, bpm_client, state, args.dry_run, args.bypass_bpm)
         total_added += added
         total_failed += failed
 
